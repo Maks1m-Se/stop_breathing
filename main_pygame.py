@@ -12,28 +12,32 @@ pygame.mixer.init()
 monster_move=True
 
 # Constants for screen dimensions
-SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
+SCREEN_WIDTH, SCREEN_HEIGHT = 1000, 800
 FPS = 45  # Frames per second
 
-
+                         
 # Load music
 # random_menu_sound = random.choice(os.listdir(os.path.join('assets', 'sounds','music')))
 # menu_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'music', random_menu_sound))
 game_music = pygame.mixer.Sound(os.path.join('assets', 'music', 'chopin_funeral_lento_cut_eq.mp3'))
 breath_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'breathing.ogg'))
-intro_creepy_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'intro_creepy.mp3'))
+creepy_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'intro_creepy.mp3'))
 kill_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'kill.mp3'))
 monster_start_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'monster_start.mp3'))
 inhale_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'inhale.mp3'))
 gasp_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'gasp2.wav'))
 holding_breath_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'holding_breath.ogg'))
+
+horror_hit_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'horror-hit.mp3'))
+choke_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'choke.mp3'))
+
 breath_sound.set_volume(.1)
-intro_creepy_sound.set_volume(.5)
+creepy_sound.set_volume(.5)
 monster_start_sound.set_volume(.2)
 holding_breath_sound.set_volume(.5)
 game_music.set_volume(2)
 
-intro_creepy_sound.play()
+
 breath_sound.play()
 
 
@@ -41,20 +45,30 @@ breath_sound.play()
 PLAYER_IMAGE = pygame.image.load("assets/images/player.png")  # Replace with your player image path
 MONSTER_IMAGE = pygame.image.load("assets/images/monster.png")  # Replace with your monster image path
 PLAYER_DEAD_IMAGE = pygame.image.load("assets/images/player_dead.png")
+DIZZY_IMAGE = pygame.image.load("assets/images/dizzy5.png")
+
+
+
 
 # Scale images (optional, adjust as needed)
-PLAYER_SIZE = (50, 50)
-MONSTER_SIZE = (60, 60)
+
+PLAYER_SIZE = (40, 40)
+MONSTER_SIZE = (100, 100)
 PLAYER_IMAGE = pygame.transform.scale(PLAYER_IMAGE, PLAYER_SIZE)
 PLAYER_DEAD_IMAGE = pygame.transform.scale(PLAYER_DEAD_IMAGE, PLAYER_SIZE)
 MONSTER_IMAGE = pygame.transform.scale(MONSTER_IMAGE, MONSTER_SIZE)
+DIZZY_IMAGE = pygame.transform.scale(DIZZY_IMAGE, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
 # Colors
 WHITE = (255, 255, 255)
-RED = (255, 0, 0)
+RED = (191, 4, 19)
+GREY = (157, 151, 157)
 LIGHTGREY = (247, 241, 247)
 LIGHTRED = (255, 196, 205)
-COLOR_BUTTON = LIGHTGREY
+BLUE = (7, 136, 217)
+LIGHTBLUE = (213, 231, 242)
+COLORS_AIRBAR = [BLUE, LIGHTBLUE]
+COLOR_BUTTON = [BLUE, LIGHTGREY]
 
 # Button properties
 button_width = 200
@@ -126,10 +140,39 @@ class Monster:
         """Draw the monster on the screen."""
         screen.blit(self.image, self.rect)
 
+class AirBar():
+    def __init__(self, x, y, width, height, max_air):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.air = max_air
+        self.max_air = max_air
+    
+    def draw(self, surface):
+        if self.air > self.max_air:
+            self.air = self.max_air
+        if self.air < 0:
+            self.air = 0
+            
+        ratio = self.air / self.max_air
+        pygame.draw.rect(surface, COLORS_AIRBAR[1], (self.x, self.y, self.width, self.height))
+        pygame.draw.rect(surface, COLORS_AIRBAR[0], (self.x, self.y, self.width  * ratio, self.height))
 
+def display_announcement(screen, text1, text2):
+    font1 = pygame.font.Font(None, 200)  # Choose a large font
+    font2 = pygame.font.Font(None, 150)  # Choose a large font
+    text1_surface = font1.render(text1, True, RED)  # Your game title
+    text2_surface = font2.render(text2, True, RED)  # Your game title
+    text1_rect = text1_surface.get_rect(center=(SCREEN_WIDTH // 2, int(SCREEN_HEIGHT * .33)))
+    text2_rect = text2_surface.get_rect(center=(SCREEN_WIDTH // 2, int(SCREEN_HEIGHT * .66)))
+    screen.blit(text1_surface, text1_rect)  # Draw title text
+    screen.blit(text2_surface, text2_rect)  # Draw title text
+    pygame.display.flip()
+    creepy_sound.play()
 
-def show_blood_splatter(screen, player, player_pos, monster, monster_pos):
-    """Displays blood splatter away from the direction the monster was coming, using stretched ellipses."""
+def player_dying(screen, player, player_pos, monster, monster_pos, display_blood=True):
+    """Dying of player. Displays blood splatter away from the direction the monster was coming, using stretched ellipses."""
     SPLATTER_COUNT = 100  # Number of splatter shapes
     SPLATTER_SPREAD = 80  # Max distance for splatter
 
@@ -177,7 +220,8 @@ def show_blood_splatter(screen, player, player_pos, monster, monster_pos):
         ellipse_rect = rotated_ellipse.get_rect(center=(int(splatter_x), int(splatter_y)))
         
         # Draw splatter
-        screen.blit(rotated_ellipse, ellipse_rect)
+        if display_blood:
+            screen.blit(rotated_ellipse, ellipse_rect)
         
         # Draw game elements
         player.image = pygame.transform.rotate(PLAYER_DEAD_IMAGE, -math.degrees(math.atan2(dy, dx)+90))
@@ -193,11 +237,13 @@ def show_blood_splatter(screen, player, player_pos, monster, monster_pos):
 
 # Main game function
 def main():
-    global space_held, COLOR_BUTTON, button_x, button_y, button_width, button_height, monster_move
+    global space_held, COLOR_BUTTON, button_x, button_y, button_width, button_height, monster_move, COLORS_AIRBAR, COLOR_BUTTON
 
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Stop Breathing")
     clock = pygame.time.Clock()
+
+    airbar = AirBar(SCREEN_WIDTH*0.02, SCREEN_WIDTH*0.01, SCREEN_WIDTH*0.96, 5, 1000)
     
     # Initialize player and monster
     player = Player(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
@@ -220,13 +266,27 @@ def main():
     monster = Monster(x_monster_start, y_monster_start)
     click_positions = []
     player_dead = False  # Track if player is dead
+    
     # Draw everything initially
     screen.fill(WHITE)
+    airbar.draw(screen)
     player.draw(screen)
     monster.draw(screen)
+
+    # Display game title
+    fade_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+    fade_surface.fill((0,0,0))
+    fade_surface.set_alpha(200)
+    screen.blit(fade_surface, (0, 0))
     pygame.display.flip()
-    game_music.play()
+
+    time.sleep(2)
+
+    display_announcement(screen, 'STOP', 'BREATHING')
+  
     time.sleep(3)
+
+    game_music.play()
     monster_start_sound.play()
     
 
@@ -246,9 +306,10 @@ def main():
             elif event.type == pygame.KEYDOWN:             
                 if event.key == pygame.K_SPACE:
                     if not space_held:  # If space wasn't held, start holding
-                        COLOR_BUTTON = LIGHTRED
                         space_held = True
                         monster_move = False
+                        COLORS_AIRBAR = [RED, LIGHTRED]
+                        COLOR_BUTTON = [RED, LIGHTRED]
 
                         gasp_sound.stop()
                         breath_sound.stop()
@@ -258,10 +319,11 @@ def main():
                         
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_SPACE:
-                    if space_held:  # If space was held, stop holding
-                        COLOR_BUTTON = LIGHTGREY  
+                    if space_held:  # If space was held, stop holding 
                         space_held = False
                         monster_move = True
+                        COLORS_AIRBAR = [BLUE, LIGHTBLUE]
+                        COLOR_BUTTON = [BLUE, LIGHTGREY]
 
                         inhale_sound.stop()
                         holding_breath_sound.stop()
@@ -269,36 +331,70 @@ def main():
                         gasp_sound.play()  # Play breath sound when space is released
                         breath_sound.play()
         
+        if not space_held:
+            airbar.air += 1
+        else:
+            airbar.air -= 1
+        DIZZY_IMAGE.set_alpha(255-255*airbar.air/airbar.max_air)
+        print('air', airbar.air)
+        print('dizzy alpha', 255-255*airbar.air/airbar.max_air)
+
         # Update player movement towards last clicked position
         if not player_dead:  # Only update movement if alive
             player.update()
             monster.update(player.rect.center, monster_move)
         
-        # Check collision
-        if player.rect.colliderect(monster.rect):
+
+        # Collision Monster Player 
+        player_mask = pygame.mask.from_surface(player.image)
+        monster_mask = pygame.mask.from_surface(monster.image)
+        offset = (monster.rect.x - player.rect.x, monster.rect.y - player.rect.y)
+
+        if player_mask.overlap(monster_mask, offset):  # Checks exact shape collision
             pygame.mixer.stop()
+            horror_hit_sound.play()
             kill_sound.play()
             player_dead = True  # Mark as dead
-            show_blood_splatter(screen, player, player.rect.center, monster, monster.rect.center)
+            player_dying(screen, player, player.rect.center, monster, monster.rect.center, display_blood=True)
             print("Game Over! The monster caught you.")
-            time.sleep(3)
+            time.sleep(2)
+            display_announcement(screen, "GAME OVER", "Caught")
+            time.sleep(6)
             running = False
             break
 
+        # Out of air
+        if airbar.air <= 0:
+            pygame.mixer.stop()
+            horror_hit_sound.play()
+            choke_sound.play()
+
+            player_dying(screen, player, player.rect.center, monster, monster.rect.center, display_blood=False)
+            print("Game Over! You suffocated")
+            time.sleep(2)
+            display_announcement(screen, "GAME OVER", "Suffocated")
+            time.sleep(6)
+            running = False
+            break
+
+
         # Draw click positions
         for pos in click_positions:
-            pygame.draw.circle(screen, RED, pos, 3)
+            pygame.draw.circle(screen, GREY, pos, 3)
         # Draw everything
+        airbar.draw(screen)
         player.draw(screen)
         monster.draw(screen)
 
+
         # Draw "Hold Breath" button
-        pygame.draw.rect(screen, COLOR_BUTTON, (button_x, button_y, button_width, button_height))
+        pygame.draw.rect(screen, COLOR_BUTTON[1], (button_x, button_y, button_width, button_height))
         font = pygame.font.Font(None, 36)
-        text = font.render("Hold Breath", True, (0, 0, 0))
+        text = font.render("Hold Breath", True, COLOR_BUTTON[0])
         screen.blit(text, (button_x + (button_width - text.get_width()) // 2, button_y + (button_height - text.get_height()) // 2))
         
-        
+        # DIZZY
+        screen.blit(DIZZY_IMAGE, (0,0))
         
 
         pygame.display.flip()
