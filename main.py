@@ -10,11 +10,31 @@ import asyncio
 pygame.init()
 pygame.font.init()
 pygame.mixer.init()
-monster_move=True
 
-# Constants for screen dimensions
+
+# Constants
 SCREEN_WIDTH, SCREEN_HEIGHT = 1000, 800
-FPS = 45  # Frames per second
+FPS = 45
+
+# Colors
+BLACK = (0,0,0)
+WHITE = (255, 255, 255)
+RED = (191, 4, 19)
+GREY = (157, 151, 157)
+LIGHTGREY = (247, 241, 247)
+LIGHTRED = (255, 196, 205)
+BLUE = (7, 136, 217)
+LIGHTBLUE = (213, 231, 242)
+COLORS_AIRBAR = [BLUE, LIGHTBLUE]
+COLOR_BUTTON = [BLUE, LIGHTGREY]
+
+font1 = pygame.font.Font(None, 200)  # Choose a large font
+font2 = pygame.font.Font(None, 150)  # Choose a large font
+font3 = pygame.font.Font(None, 30)  # Choose a large font
+
+# Game State Variables
+space_held = False
+monster_move = True
 
                          
 # Load music
@@ -34,6 +54,7 @@ click_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'click.mp3'))
 horror_hit_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'horror-hit.mp3'))
 choke_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'choke.mp3'))
 
+poke_sound.set_volume(.3)
 breath_sound.set_volume(.1)
 creepy_sound.set_volume(.5)
 monster_start_sound.set_volume(.2)
@@ -62,16 +83,7 @@ PLAYER_DEAD_IMAGE = pygame.transform.scale(PLAYER_DEAD_IMAGE, PLAYER_SIZE)
 MONSTER_IMAGE = pygame.transform.scale(MONSTER_IMAGE, MONSTER_SIZE)
 DIZZY_IMAGE = pygame.transform.scale(DIZZY_IMAGE, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
-# Colors
-WHITE = (255, 255, 255)
-RED = (191, 4, 19)
-GREY = (157, 151, 157)
-LIGHTGREY = (247, 241, 247)
-LIGHTRED = (255, 196, 205)
-BLUE = (7, 136, 217)
-LIGHTBLUE = (213, 231, 242)
-COLORS_AIRBAR = [BLUE, LIGHTBLUE]
-COLOR_BUTTON = [BLUE, LIGHTGREY]
+
 
 # Button properties
 button_width = 200
@@ -162,17 +174,60 @@ class AirBar():
         pygame.draw.rect(surface, COLORS_AIRBAR[1], (self.x, self.y, self.width, self.height))
         pygame.draw.rect(surface, COLORS_AIRBAR[0], (self.x, self.y, self.width  * ratio, self.height))
 
-def display_announcement(screen, text1, text2):
-    font1 = pygame.font.Font(None, 200)  # Choose a large font
-    font2 = pygame.font.Font(None, 150)  # Choose a large font
-    text1_surface = font1.render(text1, True, RED)  # Your game title
-    text2_surface = font2.render(text2, True, RED)  # Your game title
+def display_announcement(screen, text1, text2, show_replay=False):
+    
+    text1_surface = font1.render(text1, True, RED)  # Main message
+    text2_surface = font2.render(text2, True, RED)  # Sub message
     text1_rect = text1_surface.get_rect(center=(SCREEN_WIDTH // 2, int(SCREEN_HEIGHT * .33)))
     text2_rect = text2_surface.get_rect(center=(SCREEN_WIDTH // 2, int(SCREEN_HEIGHT * .66)))
+    
+    # fade_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+    # fade_surface.fill((0,0,0))
+    # fade_surface.set_alpha(100)
+    # screen.blit(fade_surface, (0, 0)) # Black background
     screen.blit(text1_surface, text1_rect)  # Draw title text
-    screen.blit(text2_surface, text2_rect)  # Draw title text
-    pygame.display.flip()
+    screen.blit(text2_surface, text2_rect)  # Draw subtitle text
+    
+
+    time.sleep(1)
+    # Draw replay button if needed
+    if show_replay:
+        # replay_rect = pygame.Rect(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT * 0.8, 200, 60)
+        # pygame.draw.rect(screen, COLOR_BUTTON[1], replay_rect)
+        # font = pygame.font.Font(None, 50)
+        # text = font.render("Replay", True, COLOR_BUTTON[0])
+        # screen.blit(text, (replay_rect.x + (200 - text.get_width()) // 2, replay_rect.y + (60 - text.get_height()) // 2))
+        # ##
+        button_rect = pygame.Rect(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT * 0.8, 200, 60)
+        color = GREY
+        pygame.draw.rect(screen, color, button_rect, border_radius=10)  
+        label_surface = font3.render("RESTART", True, BLACK)
+        screen.blit(label_surface, (button_rect.x + (200 - label_surface.get_width()) // 2, button_rect.y + (60 - label_surface.get_height()) // 2))     
+
     creepy_sound.play()
+    pygame.display.flip()
+    
+    return button_rect if show_replay else None
+
+def wait_for_replay_click(screen, button_rect):
+    """Waits for user to click replay button or quit the game."""
+    while True:
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        color = GREY if button_rect.collidepoint(mouse_x, mouse_y) else LIGHTGREY  
+        pygame.draw.rect(screen, color, button_rect, border_radius=10)  
+        label_surface = font3.render("RESTART", True, BLACK)
+        screen.blit(label_surface, (button_rect.x + (200 - label_surface.get_width()) // 2, button_rect.y + (60 - label_surface.get_height()) // 2))     
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if button_rect.collidepoint(event.pos):
+                    click_sound.play()
+                    return  # Restart the game
+
+        #pygame.time.delay(100)  # Small delay to avoid CPU overload
 
 def player_dying(screen, player, player_pos, monster, monster_pos, display_blood=True):
     """Dying of player. Displays blood splatter away from the direction the monster was coming, using stretched ellipses."""
@@ -239,7 +294,7 @@ def player_dying(screen, player, player_pos, monster, monster_pos, display_blood
 
 
 # Main game function
-def main():
+async def main():
     global space_held, COLOR_BUTTON, button_x, button_y, button_width, button_height, monster_move, COLORS_AIRBAR, COLOR_BUTTON
 
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -272,7 +327,7 @@ def main():
     
     # Draw everything initially
     screen.fill(WHITE)
-    airbar.draw(screen)
+    #airbar.draw(screen)
     player.draw(screen)
     monster.draw(screen)
 
@@ -283,11 +338,11 @@ def main():
     screen.blit(fade_surface, (0, 0))
     pygame.display.flip()
 
-    time.sleep(2)
+    await asyncio.sleep(2)
 
     display_announcement(screen, 'STOP', 'BREATHING')
   
-    time.sleep(3)
+    await asyncio.sleep(3)
 
     game_music.play()
     monster_start_sound.play()
@@ -361,9 +416,11 @@ def main():
             player_dead = True  # Mark as dead
             player_dying(screen, player, player.rect.center, monster, monster.rect.center, display_blood=True)
             print("Game Over! The monster caught you.")
-            time.sleep(2)
-            display_announcement(screen, "GAME OVER", "Caught")
-            time.sleep(6)
+            await asyncio.sleep(2)
+            button_rect = display_announcement(screen, "GAME OVER", "Caught", show_replay=True)
+            wait_for_replay_click(screen, button_rect)  # Wait for replay click
+            await main()  # Restart game
+            await asyncio.sleep(6)
             running = False
             break
 
@@ -375,16 +432,18 @@ def main():
 
             player_dying(screen, player, player.rect.center, monster, monster.rect.center, display_blood=False)
             print("Game Over! You suffocated")
-            time.sleep(2)
-            display_announcement(screen, "GAME OVER", "Suffocated")
-            time.sleep(6)
+            await asyncio.sleep(2)
+            button_rect = display_announcement(screen, "GAME OVER", "Suffocated", show_replay=True)
+            wait_for_replay_click(screen, button_rect)
+            await main()
+            await asyncio.sleep(6)
             running = False
             break
 
 
         # Draw click positions
         for pos in click_positions:
-            pygame.draw.circle(screen, GREY, pos, 3)
+            pygame.draw.circle(screen, BLACK, pos, 3)
         # Draw everything
         airbar.draw(screen)
         player.draw(screen)
@@ -403,9 +462,9 @@ def main():
 
         pygame.display.flip()
         clock.tick(FPS)  # Maintain FPS
+        await asyncio.sleep(0)
     
     pygame.quit()
-    sys.exit()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
