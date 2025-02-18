@@ -53,7 +53,8 @@ click_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'click.mp3'))
 
 horror_hit_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'horror-hit.mp3'))
 choke_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'choke.mp3'))
-
+inhale_sound.set_volume(.5)
+gasp_sound.set_volume(.5)
 poke_sound.set_volume(.3)
 breath_sound.set_volume(.1)
 creepy_sound.set_volume(.5)
@@ -224,6 +225,7 @@ def wait_for_replay_click(screen, button_rect):
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if button_rect.collidepoint(event.pos):
+                    pygame.mixer.stop()
                     click_sound.play()
                     return  # Restart the game
 
